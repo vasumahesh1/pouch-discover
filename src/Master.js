@@ -1,20 +1,29 @@
 var q = require('q');
 var networkAddress = require('network-address');
 
-module.exports = MasterInstance;
+module.exports = Master;
 
-function MasterInstance(database, remoteUrl, expressPort, options) {
+function Master(syncDbName, pouchInstance, remoteUrl, expressPort, options) {
 
   options = options ? options : {};
 
   var localDB = options.localDB ? options.localDB || null;
+  var clientGuid = options.guid ? options.guid || null;
   var networkNode = options.node ? options.node || null;
+
+  if (!syncDbName) {
+    throw new Error('Invalid Config: Must Provide Database Name for Master');
+  }
 
   if (!remoteUrl) {
     throw new Error('Invalid Config: Must Provide Remote URL for Master');
   }
 
-  if (!database) {
+  if (!clientGuid) {
+    throw new Error('Invalid Config: Must Provide Client GUID for Master');
+  }
+
+  if (!pouchInstance) {
     throw new Error('Invalid Config: Must Provide PocuhDB Instance for Master');
   }
 
@@ -26,16 +35,18 @@ function MasterInstance(database, remoteUrl, expressPort, options) {
     throw new Error('Invalid Config: Must Provide Discover Node Instance for Master');
   }
 
-  var trace = debug('pouch-discover:trace:MasterInstance');
-  var info = debug('pouch-discover:info:MasterInstance');
-  var error = debug('pouch-discover:error:MasterInstance');
+  var trace = debug('pouch-discover:trace:Master');
+  var info = debug('pouch-discover:info:Master');
+  var error = debug('pouch-discover:error:Master');
 
-  var PouchDB = database.constructor;
+  var PouchDB = pouchInstance.constructor;
   var port = expressPort ? expressPort : 1777;
   var sequenceDocument;
+  var replicationHook;
 
   return {
-    promote: promote
+    promote: promote,
+    cancelSync: cancelSync
   };
 
   //////////////////////
@@ -43,6 +54,8 @@ function MasterInstance(database, remoteUrl, expressPort, options) {
   function promote() {
     var returnPromise = q.defer();
     var ip = networkAddress();
+
+    cancelSync();
 
     trace('Attempting to launch Express PouchDB');
     _launchExpressPouch()
@@ -52,6 +65,15 @@ function MasterInstance(database, remoteUrl, expressPort, options) {
         return _getRemoteSequence();
       })
       .then(function(sequence) {
+
+        var adv = {};
+        adv.localUrl = 'http://' + address() + ':' + port + '/' + syncDbName;
+        adv.clientGuid = clientGuid;
+
+        trace('Sending Advertisement to Nodes:', adv);
+
+        networkNode.advertise(adv);
+
         return _startRemoteReplication(sequence);
       })
       .catch(function(err) {
@@ -120,13 +142,13 @@ function MasterInstance(database, remoteUrl, expressPort, options) {
   }
 
   function _startRemoteReplication(remoteSequence) {
-    PouchDB.replicate(target, remoteUrl, {
+    replicationHook = PouchDB.replicate(target, remoteUrl, {
         retry: true,
         live: true,
         since: remoteSequence
       })
       .on('change', function(info) {
-        trace('Replication - Change Event', info['last_seq']);
+        trace('Remote Replication - Change Event', info['last_seq']);
 
         var sequence = info['last_seq'];
         sequenceDocument.web = sequence;
@@ -151,5 +173,14 @@ function MasterInstance(database, remoteUrl, expressPort, options) {
       .on('error', function(err) {
         error('Remote Replication - Error', err);
       });
+  }
+
+  function cancelSync() {
+    if (replicationHook) {
+      info('Cancelling Existing Remote Replication');
+      replicationHook.cancel();
+    }
+
+    replicationHook = null;
   }
 }

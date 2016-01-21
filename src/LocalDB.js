@@ -4,14 +4,14 @@ var debug = require('debug');
 module.exports = LocalDB;
 
 function LocalDB(path) {
-  path = path ? path : 'seq/lan.db';
+  path = path ? path : 'seq/sequence.db';
 
   var trace = debug('pouch-discover:trace:LocalDB');
   var info = debug('pouch-discover:info:LocalDB');
   var error = debug('pouch-discover:error:LocalDB');
 
   var _dbOptions = {
-    filename: 'seq/lan.db',
+    filename: path,
     autoload: true
   };
 
