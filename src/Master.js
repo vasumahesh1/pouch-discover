@@ -1,4 +1,5 @@
 var q = require('q');
+var debug = require('debug');
 var networkAddress = require('network-address');
 
 module.exports = Master;
@@ -7,9 +8,9 @@ function Master(syncDbName, pouchInstance, remoteUrl, expressPort, options) {
 
   options = options ? options : {};
 
-  var localDB = options.localDB ? options.localDB || null;
-  var clientGuid = options.guid ? options.guid || null;
-  var networkNode = options.node ? options.node || null;
+  var localDB = options.localDB ? options.localDB : null;
+  var clientGuid = options.guid ? options.guid : null;
+  var networkNode = options.node ? options.node : null;
 
   if (!syncDbName) {
     throw new Error('Invalid Config: Must Provide Database Name for Master');

@@ -1,3 +1,4 @@
+var q = require('q');
 var NeDB = require('nedb');
 var debug = require('debug');
 

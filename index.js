@@ -19,6 +19,11 @@ var policy;
 
 exports.discover = utils.toPromise(function(syncDbName, remoteUrl, guid, options) {
   var pouchInstance = this;
+  info('Launching Node:');
+  info('- Local DB Name:', syncDbName);
+  info('- Remote URL', remoteUrl);
+  info('- Node GUID', guid);
+
   var node = Discover();
 
   var isMaster = false;
@@ -32,35 +37,47 @@ exports.discover = utils.toPromise(function(syncDbName, remoteUrl, guid, options
 
   var masterPort = options.port || null;
 
-  var masterInstance = Master(syncDbName, pouchInstance, remoteUrl, masterPort, commonOptions);
-  var slaveInstance = Slave(syncDbName, pouchInstance, commonOptions);
+  // var masterInstance = Master(syncDbName, pouchInstance, remoteUrl, masterPort, commonOptions);
+  // var slaveInstance = Slave(syncDbName, pouchInstance, commonOptions);
 
-  policy = Policy(false, commonOptions);
+  policy = new Policy(false, commonOptions);
+
+  info('Node Launched. Now Listening for Events.');
 
   node.on('promotion', function(nodeData) {
+    info('Node Promoted');
     isMaster = true;
-    policy = Policy(true, commonOptions);
-    masterInstance.promote();
+    policy = new Policy(true, commonOptions);
+    // masterInstance.promote();
   });
 
   node.on('demotion', function(nodeData) {
+    info('Node Demoted');
     isMaster = false;
-    masterInstance.cancelSync();
-    policy = Policy(false, commonOptions);
+    // masterInstance.cancelSync();
+    policy = new Policy(false, commonOptions);
   });
 
   node.on('added', function(nodeData) {
-    
+    info('Node Added');
+    if (isMaster) {
+      setTimeout(function() {
+        policy.apply();
+      }, 10000);
+    } else {
+
+    }
   });
 
   node.on('removed', function(nodeData) {
-    log(arguments);
-    onNodeRemoved(db, target, nodeData);
+    info('Node Removed');
+
   });
 
   node.on('master', function(nodeData) {
-    log(arguments);
-    onNewMaster(db, target, node, nodeData);
+    info('New Master');
+    policy.subscribe();
+
   });
 });
 

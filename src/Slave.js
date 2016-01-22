@@ -1,4 +1,5 @@
 var q = require('q');
+var debug = require('debug');
 var networkAddress = require('network-address');
 
 module.exports = Slave;
@@ -7,8 +8,8 @@ function Slave(syncDbName, pouchInstance, options) {
 
   options = options ? options : {};
 
-  var localDB = options.localDB ? options.localDB || null;
-  var networkNode = options.node ? options.node || null;
+  var localDB = options.localDB ? options.localDB : null;
+  var networkNode = options.node ? options.node : null;
 
   if (!syncDbName) {
     throw new Error('Invalid Config: Must Provide Database Name for Slave');

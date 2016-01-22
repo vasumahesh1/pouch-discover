@@ -1,17 +1,21 @@
 var q = require('q');
+var debug = require('debug');
 var networkAddress = require('network-address');
 
-module.exports = Slave;
+module.exports = Policy;
 
 function Policy(isMaster, options) {
+  var trace = debug('pouch-discover:trace:Policy');
+  var info = debug('pouch-discover:info:Policy');
+  var error = debug('pouch-discover:error:Policy');
 
   isMaster = isMaster ? isMaster : false;
 
   options = options ? options : {};
 
-  var localDB = options.localDB ? options.localDB || null;
-  var networkNode = options.node ? options.node || null;
-  var clientGuid = options.guid ? options.guid || null;
+  var localDB = options.localDB ? options.localDB : null;
+  var networkNode = options.node ? options.node : null;
+  var clientGuid = options.guid ? options.guid : null;
 
   if (!networkNode) {
     throw new Error('Invalid Config: Must Provide Discover Node Instance for Policy');
@@ -26,13 +30,11 @@ function Policy(isMaster, options) {
   }
 
   // Wait for Collecting Sequence tokens from all Nodes
-  var wait = options.wait ? options.wait || 30000;
-
-  var trace = debug('pouch-discover:trace:Policy');
-  var info = debug('pouch-discover:info:Policy');
-  var error = debug('pouch-discover:error:Policy');
+  var wait = options.wait ? options.wait : 30000;
 
   var sequenceDocument;
+
+  trace('Policy Initialized');
 
   return {
     apply: apply,
@@ -50,54 +52,47 @@ function Policy(isMaster, options) {
       _getRemoteSequence()
         .then(function(sequence) {
           var localWebMap = {};
+          localWebMap[clientGuid] = sequence;
 
-          var result = networkNode.join('pouchDiscover:webSequence:reportBack', function(data) {
-            if (data) {
-              localWebMap[data.guid] = data.sequence;
-            } else {
-              error('Error in ReportBack Data');
+          networkNode.eachNode(function(node) {
+            var adv = node.advertisement;
+
+            if (adv && adv.isSlave) {
+              localWebMap[adv.guid] = adv.webSequence;
             }
           });
 
-          if (result) {
-            trace('Asking Nodes to Report Web Sequence');
-            networkNode.send('pouchDiscover:webSequence:report');
-
-            setTimeout(function() {
-
-              var highest = -1;
-              var newMasterGuid;
-
-              for (var key in localWebMap) {
-
-                var sequence = localWebMap[key];
-
-                if (highest < sequence) {
-                  highest = sequence;
-                  newMasterGuid = key;
-                }
-              }
-
-              trace('Report Timeout Expired. Node Mapping is as: ', localWebMap);
-
-              if (newMasterGuid !=== clientGuid) {
-                // Not the Same Master
-                info('Selected new Master: ' + clientGuid);
-                networkNode.send('pouchDiscover:webSequence:result', newMasterGuid);
-                networkNode.demote();
-              } else {
-                info('Same GUID Detected. Master will not Change. Current Master is Highest and Up to Date.');
-              }
-
-            }, wait);
-
-          } else {
-            error('Unable to Join ReportBack Channel');
-          }
+          _selectNewMaster(localWebMap);
         })
         .catch(function(err) {
           error('Report Send Error: Policy Remote Sequence Get Error.', err);
         });
+    }
+  }
+
+  function _selectNewMaster(mapping) {
+    var highest = -1;
+    var newMasterGuid;
+
+    for (var key in mapping) {
+
+      var sequence = mapping[key];
+
+      if (highest < sequence) {
+        highest = sequence;
+        newMasterGuid = key;
+      }
+    }
+
+    trace('Report Timeout Expired. Node Mapping is: ', mapping);
+
+    if (newMasterGuid.toString() !== clientGuid.toString()) {
+      // Not the Same Master
+      info('Selected new Master: ' + newMasterGuid);
+      networkNode.send('pouchDiscover:webSequence:result', newMasterGuid);
+      networkNode.demote();
+    } else {
+      info('Same GUID Detected. Master will not Change. Current Master is Highest and Up to Date.');
     }
   }
 
@@ -106,36 +101,31 @@ function Policy(isMaster, options) {
     // For Slaves
     if (!isMaster) {
       trace('Subscribing Polcy: Slave');
-      var success = networkNode.join('pouchDiscover:webSequence:report', function() {
-        _getRemoteSequence()
-          .then(function(sequence) {
-            var data = {};
-            data.sequence = sequence;
-            data.guid = clientGuid;
 
-            var result = networkNode.join('pouchDiscover:webSequence:result', function(guid) {
-              if (guid && guid === clientGuid) {
-                info('Report: Node Selected. Promoting to Master');
-                networkNode.promote();
-              }
-            });
+      _getRemoteSequence()
+        .then(function(sequence) {
+          var data = {};
+          data.guid = clientGuid;
+          data.webSequence = sequence;
+          data.sequenceDocument = sequenceDocument;
+          data.isSlave = true;
 
-            if (result) {
-              trace('Report: Sending Requested Sequence Data', data);
-              networkNode.send('pouchDiscover:webSequence:reportBack', data);
-            } else {
-              error('Error Joining Result Channel');
-            }
-          })
-          .catch(function(err) {
-            error('Report Error: Policy Remote Sequence Get Error.', err);
-          });
+          networkNode.advertisement = data;
+        })
+        .catch(function(err) {
+          error('Report Error: Policy Remote Sequence Get Error.', err);
+        });
+
+      var result = networkNode.join('pouchDiscover:webSequence:result', function(guid) {
+        if (guid && guid === clientGuid) {
+          info('Report: Node Selected. Promoting to Master');
+          networkNode.promote();
+        }
       });
 
-      if (!success) {
-        error('Error Joining Channel: pouchDiscover:webSequence:update');
+      if (!result) {
+        error('Error Joining Result Channel');
       }
-
     }
   }
 

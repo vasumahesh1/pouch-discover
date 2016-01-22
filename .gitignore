@@ -5,3 +5,7 @@ coverage
 test/test-bundle.js
 npm-debug.log
 /seq
+
+/configOverride.json
+
+pouch-discover-test-db*

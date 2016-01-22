@@ -6,19 +6,18 @@ Requires a CouchDB database for syncing to remote
 
 System 1:
 ```
-node run.js
+node run.js --remote=<REMOTE_DB_URL> --guid=node1
 ```
 
 System 2:
 ```
-node runB.js
+node run.js --remote=<REMOTE_DB_URL> --guid=node2
 ```
 
-Try killing the `master` node and observe how the other node gets promoted as the master node.
-
+Repeat for any other systems.
 
 #### Work left:
-  *   Polish Code
-  *   Master selection policy
+  *   Polish Code - In Progress
+  *   Master selection policy - In Progress
   *   Clean up
   *   Tests
