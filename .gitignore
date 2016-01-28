@@ -9,3 +9,10 @@ npm-debug.log
 /configOverride.json
 
 pouch-discover-test-db*
+
+log.txt
+
+_replicator/
+_users/
+pouch__all_dbs__/
+pouch__auth_sessions__/

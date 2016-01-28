@@ -9,10 +9,15 @@ function Slave(syncDbName, pouchInstance, options) {
   options = options ? options : {};
 
   var localDB = options.localDB ? options.localDB : null;
+  var clientGuid = options.guid ? options.guid : null;
   var networkNode = options.node ? options.node : null;
 
   if (!syncDbName) {
     throw new Error('Invalid Config: Must Provide Database Name for Slave');
+  }
+
+  if (!clientGuid) {
+    throw new Error('Invalid Config: Must Provide Client GUID for Slave');
   }
 
   if (!pouchInstance) {
@@ -54,7 +59,7 @@ function Slave(syncDbName, pouchInstance, options) {
           _cancelExistingReplication();
           info('Starting Replication to ' + masterNode.address + ' with seq: ' + sequence);
 
-          syncLocalMaster(syncDbName, syncUrl, sequence, clientGuid);
+          _syncLocalMaster(syncDbName, syncUrl, sequence, clientGuid);
           returnPromise.resolve();
         })
         .catch(function(err) {
@@ -69,7 +74,13 @@ function Slave(syncDbName, pouchInstance, options) {
     return returnPromise.promise;
   }
 
-  function syncLocalMaster(dbName, url, sequence, guid) {
+  function _syncLocalMaster(dbName, url, sequence, guid) {
+    trace('Syncing Arguments: ');
+    trace('- Database: ' + dbName);
+    trace('- URL: ' + url);
+    trace('- Sequence: ' + sequence);
+    trace('- GUID: ' + guid);
+
     replicationHook = PouchDB.sync(dbName, url, {
         live: true,
         retry: true,
@@ -81,6 +92,7 @@ function Slave(syncDbName, pouchInstance, options) {
         var sequence = info['last_seq'];
         sequenceDocument[guid] = sequence;
         _updateRemoteSequence();
+        networkNode.send('pouchDiscover:webSequence:requestUpdate', clientGuid);
       })
       .on('paused', function() {
         trace('Local Replication - Pause');
@@ -101,7 +113,7 @@ function Slave(syncDbName, pouchInstance, options) {
         error('Local Replication - Error', err);
       });
 
-    var success = node.join('pouchDiscover:webSequence:update', function(sequence) {
+    var success = networkNode.join('pouchDiscover:webSequence:update:' + clientGuid, function(sequence) {
       if (sequence) {
         info('Local Replication - Web Sequence from Master: ' + sequence);
         sequenceDocument.web = sequence;

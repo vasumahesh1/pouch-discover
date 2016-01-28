@@ -37,8 +37,8 @@ exports.discover = utils.toPromise(function(syncDbName, remoteUrl, guid, options
 
   var masterPort = options.port || null;
 
-  // var masterInstance = Master(syncDbName, pouchInstance, remoteUrl, masterPort, commonOptions);
-  // var slaveInstance = Slave(syncDbName, pouchInstance, commonOptions);
+  var masterInstance = Master(syncDbName, pouchInstance, remoteUrl, masterPort, commonOptions);
+  var slaveInstance = Slave(syncDbName, pouchInstance, commonOptions);
 
   policy = new Policy(false, commonOptions);
 
@@ -48,13 +48,13 @@ exports.discover = utils.toPromise(function(syncDbName, remoteUrl, guid, options
     info('Node Promoted');
     isMaster = true;
     policy = new Policy(true, commonOptions);
-    // masterInstance.promote();
+    masterInstance.promote();
   });
 
   node.on('demotion', function(nodeData) {
     info('Node Demoted');
     isMaster = false;
-    // masterInstance.cancelSync();
+    masterInstance.cancelSync();
     policy = new Policy(false, commonOptions);
   });
 
@@ -77,6 +77,8 @@ exports.discover = utils.toPromise(function(syncDbName, remoteUrl, guid, options
   node.on('master', function(nodeData) {
     info('New Master');
     policy.subscribe();
+
+    slaveInstance.switchMaster(nodeData);
 
   });
 });

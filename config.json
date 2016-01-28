@@ -1,3 +1,6 @@
 {
-  "guid": "node1"
+  "guid": "node1",
+  "couchdb": {
+    "uuid": "03f6aee7-0655-4ed4-a002-57a5406a47b3"
+  }
 }

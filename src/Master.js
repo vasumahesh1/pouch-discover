@@ -68,7 +68,7 @@ function Master(syncDbName, pouchInstance, remoteUrl, expressPort, options) {
       .then(function(sequence) {
 
         var adv = {};
-        adv.localUrl = 'http://' + address() + ':' + port + '/' + syncDbName;
+        adv.localUrl = 'http://' + networkAddress() + ':' + port + '/' + syncDbName;
         adv.clientGuid = clientGuid;
 
         trace('Sending Advertisement to Nodes:', adv);
@@ -78,6 +78,7 @@ function Master(syncDbName, pouchInstance, remoteUrl, expressPort, options) {
         return _startRemoteReplication(sequence);
       })
       .catch(function(err) {
+        error('Error in Promote: ', err);
         returnPromise.reject(err);
       });
 
@@ -143,7 +144,12 @@ function Master(syncDbName, pouchInstance, remoteUrl, expressPort, options) {
   }
 
   function _startRemoteReplication(remoteSequence) {
-    replicationHook = PouchDB.replicate(target, remoteUrl, {
+    trace('Remote Syncing Arguments: ');
+    trace('- Database: ' + syncDbName);
+    trace('- URL: ' + remoteUrl);
+    trace('- Sequence: ' + remoteSequence);
+
+    replicationHook = PouchDB.replicate(syncDbName, remoteUrl, {
         retry: true,
         live: true,
         since: remoteSequence
@@ -154,7 +160,6 @@ function Master(syncDbName, pouchInstance, remoteUrl, expressPort, options) {
         var sequence = info['last_seq'];
         sequenceDocument.web = sequence;
         _updateRemoteSequence();
-        networkNode.send('pouchDiscover:webSequence:update', sequenceDocument.web);
       })
       .on('paused', function() {
         trace('Remote Replication - Pause');
@@ -168,12 +173,20 @@ function Master(syncDbName, pouchInstance, remoteUrl, expressPort, options) {
       .on('uptodate', function() {
         trace('Remote Replication - Up To Date');
       })
-      .on('complete', function() {
-        trace('Remote Replication - Complete');
+      .on('complete', function(info) {
+        trace('Remote Replication - Complete', info);
       })
       .on('error', function(err) {
         error('Remote Replication - Error', err);
       });
+
+
+    networkNode.join('pouchDiscover:webSequence:requestUpdate', function(guid) {
+      if (guid) {
+        trace('Sending Web Sequence to: ' + guid, sequenceDocument.web);
+        networkNode.send('pouchDiscover:webSequence:update:' + guid, sequenceDocument.web);
+      }
+    });
   }
 
   function cancelSync() {
